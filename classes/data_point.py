@@ -54,3 +54,13 @@ class Person(Stat):
         self.id = id
         self.name = name
         self.ser_metrics = ser_metrics
+
+
+class PressingTeam(Stat):
+
+    def __init__(self, id, name, ser_metrics, relevant_metrics):
+
+        self.id = id
+        self.name = name
+        self.ser_metrics = ser_metrics
+        self.relevant_metrics = relevant_metrics

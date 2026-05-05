@@ -6,8 +6,8 @@ import pandas as pd
 
 
 from utils.sentences import format_metric
-from classes.data_point import Player, Country, Person
-from classes.data_source import PlayerStats, CountryStats, PersonStat
+from classes.data_point import Player, Country, Person, PressingTeam
+from classes.data_source import PlayerStats, CountryStats, PersonStat, PressingStats
 from typing import Union
 
 
@@ -511,6 +511,45 @@ class DistributionPlotPersonality(Visual):
         title = f"Evaluation of {person.name}"
         subtitle = f"Based on Big Five scores"
         self.add_title(title, subtitle)
+
+
+class PressingDistributionPlot(DistributionPlot):
+    """
+    Distribution plot tailored for pressing metrics.
+    Shows rates as percentages in annotations and adds team-aware helpers.
+    """
+
+    def __init__(self, columns, *args, **kwargs):
+        super().__init__(columns, *args, **kwargs)
+        # Override annotation to show raw rates as percentages
+        self.annotation_text = "<span style=''>{metric_name}: {data:.1%}</span>"
+
+    def add_teams(self, pressing_stats: PressingStats, metrics):
+        """Plot all league teams as background dots."""
+        self.add_group_data(
+            df_plot=pressing_stats.df,
+            plots="_Z",
+            names=pressing_stats.df["team_name"],
+            hover="_Ranks",
+            hover_string="Rank: %{customdata}/" + str(len(pressing_stats.df)),
+            legend="Other teams  ",
+        )
+
+    def add_team(self, team: PressingTeam, n_group, metrics):
+        """Highlight the selected team as a distinct marker."""
+        self.add_data_point(
+            ser_plot=team.ser_metrics,
+            plots="_Z",
+            name=team.name,
+            hover="_Ranks",
+            hover_string="Rank: %{customdata}/" + str(n_group),
+        )
+
+    def add_title_from_team(self, team: PressingTeam):
+        self.add_title(
+            title=f"Pressing profile: {team.name}",
+            subtitle="Team pressing metrics vs league reference set",
+        )
 
 
 """class ViolinPlot(Visual):

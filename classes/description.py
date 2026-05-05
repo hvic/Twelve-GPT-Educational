@@ -9,8 +9,9 @@ from openai import OpenAI
 import utils.sentences as sentences
 from utils.gemini import convert_messages_format
 
-from classes.data_point import Player, Country, Person
+from classes.data_point import Player, Country, Person, PressingTeam
 from classes.data_source import PersonStat
+from classes.data_source import PressingStats
 
 import json
 
@@ -708,5 +709,87 @@ class PersonDescription(Description):
             "The second sentence should describe the person's specific strengths based on the metrics. "
             "The third sentence should describe aspects in which the person is average and/or weak based on the statistics. "
             "Finally, summarise exactly how the person compares to others in the same position. "
+        )
+        return [{"role": "user", "content": prompt}]
+
+
+class PressingDescription(Description):
+    """
+    Generates a wordalization of a team's pressing profile.
+
+    Prompt architecture (4 stages):
+      1. Persona      — tactical analyst specialising in pressing
+      2. Verbal model — Q&A pairs in data/describe/Pressing.xlsx
+      3. Data         — synthesized text converting Z-scores to sentences
+      4. Few-shot     — examples in data/gpt_examples/Pressing.xlsx
+    """
+
+    @property
+    def gpt_examples_path(self):
+        return f"{self.gpt_examples_base}/Pressing.xlsx"
+
+    @property
+    def describe_paths(self):
+        return [f"{self.describe_base}/Pressing.xlsx"]
+
+    def __init__(self, team: PressingTeam):
+        self.team = team
+        super().__init__()
+
+    def get_intro_messages(self) -> List[Dict[str, str]]:
+        intro = [
+            {
+                "role": "system",
+                "content": (
+                    "You are a UK-based tactical football analyst who specialises in pressing "
+                    "and out-of-possession play. "
+                    "You provide concise, insightful summaries of team pressing performance "
+                    "using statistical data compared against the rest of the league. "
+                    "You always frame your analysis around whether a team's pressing is a "
+                    "'wall' (effective and structured) or a 'gamble' (high-intensity but risky)."
+                ),
+            },
+            {
+                "role": "user",
+                "content": "Do you refer to the game as soccer or football?",
+            },
+            {
+                "role": "assistant",
+                "content": "I refer to the game as football.",
+            },
+        ]
+        if len(self.describe_paths) > 0:
+            intro += [
+                {
+                    "role": "user",
+                    "content": "First, could you answer some questions about pressing in football for me?",
+                },
+                {"role": "assistant", "content": "Sure!"},
+            ]
+        return intro
+
+    def synthesize_text(self) -> str:
+        team = self.team
+        description = (
+            f"Here is a statistical description of {team.name}'s pressing performance "
+            f"in the Premier League 2024-25 season, compared to all other teams in the league.\n\n"
+        )
+        for metric in team.relevant_metrics:
+            z = team.ser_metrics[metric + "_Z"]
+            phrase = PressingStats.METRIC_PHRASES[metric]
+            description += f"When it comes to {phrase}, {team.name} is "
+            description += sentences.describe_level(z)
+            description += " compared to other teams in the league. "
+        return description
+
+    def get_prompt_messages(self) -> List[Dict[str, str]]:
+        prompt = (
+            "Please use the statistical description enclosed with ``` to give a concise, "
+            "3-4 sentence summary of the team's pressing style. "
+            "The first sentence should open with a verdict: is their pressing more of a 'wall' "
+            "(structured, reliable, stops the opponent) or a 'gamble' (intense but risky)? "
+            "The second sentence should highlight their key pressing strengths. "
+            "The third sentence should describe where their pressing is weaker or riskier. "
+            "The final sentence should place them overall in the league context for pressing quality."
         )
         return [{"role": "user", "content": prompt}]

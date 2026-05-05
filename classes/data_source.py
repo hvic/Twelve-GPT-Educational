@@ -76,7 +76,7 @@ class Stats(Data):
 
         # Here we get opposite value of metrics if their weight is negative
         for metric in set(self.negative_metrics).intersection(self.metrics):
-            df_z[metric] = df_z[metric] * -1
+            df_z[metric + "_Z"] = df_z[metric + "_Z"] * -1
         return df_z
 
     def get_ranks(self, df):
@@ -377,6 +377,107 @@ class CountryStats(Stats):
             ser_metrics=ser_metrics,
             relevant_metrics=self.metrics,
             drill_down_metrics=drill_down_values,
+        )
+
+
+class PressingStats(Stats):
+    """
+    Computes team-level pressing metrics from event-level pressing data.
+
+    Metrics (all normalised to rates 0-1):
+      recovery_rate       — % pressing chains ending in regain           (higher = better)
+      force_backward_rate — % pressing events that forced a backward pass (higher = better)
+      lead_to_shot_rate   — % pressing chains that led to a shot          (higher = better)
+      danger_rate         — % pressing chains where opponent stayed dangerous (lower = better → NEGATIVE)
+      beaten_rate         — % pressing events where the press was bypassed    (lower = better → NEGATIVE)
+    """
+
+    METRICS = [
+        "recovery_rate",
+        "force_backward_rate",
+        "lead_to_shot_rate",
+        "danger_rate",
+        "beaten_rate",
+    ]
+    NEGATIVE_METRICS = ["danger_rate", "beaten_rate"]
+
+    # Human-readable phrases used in synthesized text
+    METRIC_PHRASES = {
+        "recovery_rate": "ball recovery (winning the ball back)",
+        "force_backward_rate": "forcing opponents to play backwards",
+        "lead_to_shot_rate": "converting pressing regains into shots",
+        "danger_rate": "limiting dangerous possessions conceded while pressing",
+        "beaten_rate": "press resistance (not being bypassed)",
+    }
+
+    def __init__(self, df_events: pd.DataFrame, teams_df: pd.DataFrame):
+        self.df_events = df_events
+        self.teams_df = teams_df
+        super().__init__()
+
+    def get_raw_data(self) -> pd.DataFrame:
+        return self._aggregate_team_metrics(self.df_events)
+
+    def _aggregate_team_metrics(self, df: pd.DataFrame) -> pd.DataFrame:
+        team_ids = df["team_id"].dropna().unique()
+        team_name_map = dict(zip(self.teams_df["id"], self.teams_df["name"]))
+
+        rows = []
+        bool_cols = [
+            "force_backward", "beaten_by_possession",
+            "beaten_by_movement", "stop_possession_danger", "lead_to_shot",
+        ]
+        for tid in team_ids:
+            pressing = df[(df["team_id"] == tid) & (df["pressing_chain"] == True)].copy()
+            if pressing.empty:
+                continue
+            for col in bool_cols:
+                if col in pressing.columns:
+                    pressing[col] = pressing[col].fillna(False).astype(bool)
+
+            # Chain-level aggregation (one row per unique pressing chain)
+            chains = pressing.groupby(
+                ["match_id", "pressing_chain_index"], as_index=False
+            ).first()
+
+            n_chains = max(len(chains), 1)
+            n_events = max(len(pressing), 1)
+
+            recovery_rate = (chains["pressing_chain_end_type"] == "regain").sum() / n_chains
+            force_backward_rate = pressing["force_backward"].sum() / n_events
+            lead_to_shot_rate = chains["lead_to_shot"].sum() / n_chains
+            # danger_rate: chains where pressing did NOT stop a dangerous possession
+            danger_rate = (~chains["stop_possession_danger"]).sum() / n_chains
+            beaten = pressing["beaten_by_possession"] | pressing["beaten_by_movement"]
+            beaten_rate = beaten.sum() / n_events
+
+            rows.append({
+                "team_id": tid,
+                "team_name": team_name_map.get(tid, str(tid)),
+                "recovery_rate": recovery_rate,
+                "force_backward_rate": force_backward_rate,
+                "lead_to_shot_rate": lead_to_shot_rate,
+                "danger_rate": danger_rate,
+                "beaten_rate": beaten_rate,
+            })
+
+        return pd.DataFrame(rows).reset_index(drop=True)
+
+    def process_data(self, df_raw: pd.DataFrame) -> pd.DataFrame:
+        if len(df_raw) < 3:
+            raise Exception("Not enough teams with pressing data")
+        return df_raw
+
+    def to_data_point(self) -> "data_point.PressingTeam":
+        row = self.df.iloc[0]
+        team_id = row["team_id"]
+        team_name = row["team_name"]
+        ser_metrics = row.drop(labels=["team_id", "team_name"])
+        return data_point.PressingTeam(
+            id=team_id,
+            name=team_name,
+            ser_metrics=ser_metrics,
+            relevant_metrics=self.METRICS,
         )
 
 
