@@ -66,7 +66,15 @@ def load_all_pressing_events(match_ids: tuple) -> pd.DataFrame:
     return pd.concat(frames, ignore_index=True)
 
 
-teams_df, matches_df = load_reference_data()
+try:
+    teams_df, matches_df = load_reference_data()
+except FileNotFoundError:
+    st.info(
+        "The Pressing Analyst requires match data that is not bundled with this deployment. "
+        "Run the app locally to access the full pressing analysis."
+    )
+    st.stop()
+
 all_match_ids = tuple(matches_df["id"].tolist())
 
 with st.spinner("Loading league pressing data…"):
