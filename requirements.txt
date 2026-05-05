@@ -12,3 +12,4 @@ customerio==2.1
 pillow>=10.4.0
 scipy>=1.11.0
 pyarrow>=14.0.0
+plotly>=5.18.0
