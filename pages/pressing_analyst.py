@@ -23,7 +23,8 @@ from utils.page_components import add_common_page_elements
 from utils.utils import create_chat
 
 # ── Constants ─────────────────────────────────────────────────────────────────
-DATA_PATH = "data/dynamic_events_pl_24"
+_LOCAL_DATA_PATH = "/Users/hugovicente/Documents/CODING/V2_Twelve_wordalisation/databases/dynamic_events_pl_24"
+DATA_PATH = _LOCAL_DATA_PATH if os.path.exists(_LOCAL_DATA_PATH) else "data/dynamic_events_pl_24"
 
 PRESSING_COLS = [
     "match_id", "team_id",
